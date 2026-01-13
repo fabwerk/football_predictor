@@ -327,25 +327,37 @@ class AdvancedFootballPredictor:
 
     def get_next_matchday(self) -> int:
         """
-        Determine the next matchday to predict based on fixtures data.
+        Determine the next matchday to predict based on current date.
+        Finds the matchday with matches closest to today's date.
 
         Returns:
-            The next unplayed matchday number
+            The matchday number closest to the current date
         """
-        # Find matchdays that haven't been completed yet
-        for matchday in sorted(self.fixtures_df["match_day"].unique()):
-            matchday_fixtures = self.fixtures_df[
-                self.fixtures_df["match_day"] == matchday
-            ]
-            # If no matches in this matchday are finished, it's the next one to predict
-            if not matchday_fixtures["is_finished"].any():
-                print(f"Next unplayed matchday found: {matchday}")
-                return matchday
+        # Get current time (timezone-aware to match fixture dates)
+        now = pd.Timestamp.now(tz="UTC")
 
-        # If all matchdays are finished, return the last one
-        last_matchday = self.fixtures_df["match_day"].max()
-        print(f"All matchdays completed. Using last matchday: {last_matchday}")
-        return last_matchday
+        # Get unfinished fixtures only
+        unfinished = self.fixtures_df[~self.fixtures_df["is_finished"]].copy()
+
+        if len(unfinished) == 0:
+            # All matches finished, return the last matchday
+            last_matchday = self.fixtures_df["match_day"].max()
+            print(f"All matchdays completed. Using last matchday: {last_matchday}")
+            return last_matchday
+
+        # Calculate time difference from now for each unfinished match
+        unfinished["time_diff"] = (unfinished["date"] - now).abs()
+
+        # Find the matchday with the match closest to now
+        closest_match_idx = unfinished["time_diff"].idxmin()
+        next_matchday = unfinished.loc[closest_match_idx, "match_day"]
+
+        # Get the date of this matchday for logging
+        matchday_date = unfinished.loc[closest_match_idx, "date"]
+
+        print(f"Next matchday based on current date: {next_matchday} (scheduled around {matchday_date.date()})")
+
+        return next_matchday
 
     def predict_matchday(self, matchday: int) -> List[Dict]:
         """Predict all matches for a specific matchday."""
